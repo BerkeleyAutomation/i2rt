@@ -74,6 +74,8 @@ python scripts/minimum_gello.py --gripper yam_compact_small --mode follower --ca
 
 Terminal 2: Launch leader robot
 ```bash
+conda activate i2rt_env
+cd ~/i2rt
 python scripts/minimum_gello.py --gripper yam_compact_small --mode leader --can-channel can1 --bilateral_kp 0.2
 ```
 
