@@ -60,7 +60,7 @@ The linear gripper requires an additional calibration step because its motor mus
 
 ## Run YAM Gello Leader Follower (foot pedal controls gripper)
 
-Doesn't work over ssh and make sure the following command returns x11.
+Doesn't work over ssh and make sure the following command returns x11. Also, the foot pedal corresponds to the letter 'b'.
 ```bash
 echo $XDG_SESSION_TYPE
 ```
