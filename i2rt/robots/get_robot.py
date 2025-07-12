@@ -1,6 +1,7 @@
 import logging
 import time
 from functools import partial
+from typing import Literal
 
 import numpy as np
 
@@ -23,13 +24,15 @@ def get_encoder_chain(can_interface: CanInterface) -> EncoderChain:
 def get_yam_robot(
     channel: str = "can0",
     gripper_type: GripperType = GripperType.YAM_COMPACT_SMALL,
+    mode: Literal["follower", "leader", "visualizer"] = "follower",
 ) -> MotorChainRobot:
     with_gripper = True
     with_teaching_handle = False
     if gripper_type == GripperType.YAM_TEACHING_HANDLE:
         with_gripper = False
         with_teaching_handle = True
-
+    if mode == "leader":
+        with_gripper = False
     model_path = gripper_type.get_xml_path()
     motor_list = [
         [0x01, "DM4340"],
@@ -88,7 +91,6 @@ def get_yam_robot(
 
     time.sleep(0.5)
     logging.info(f"adjusted motor_offsets: {motor_offsets}")
-
     motor_chain = DMChainCanInterface(
         motor_list,
         motor_offsets,

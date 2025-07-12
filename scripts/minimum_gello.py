@@ -5,6 +5,7 @@ from typing import Dict, Literal
 import numpy as np
 import portal
 import tyro
+from pynput import keyboard # NOTE: Make sure your XDG_SESSION_TYPE is x11
 
 from i2rt.robots.get_robot import get_yam_robot
 from i2rt.robots.motor_chain_robot import MotorChainRobot
@@ -80,17 +81,57 @@ class ClientRobot(Robot):
 
 
 class YAMLeaderRobot:
-    def __init__(self, robot: MotorChainRobot):
+    def __init__(self, robot: MotorChainRobot, with_teaching_handle: bool = True):
         self._robot = robot
         self._motor_chain = robot.motor_chain
+        self._with_teaching_handle = with_teaching_handle
+        self._synchronized = False  # ONLY FOR WHEN WE DON'T HAVE A TEACHING HANDLE
+        self._b_pressed = False
+        if not self._with_teaching_handle:
+            listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+            listener.start()
+
+    def _on_press(self, key):
+        try:
+            if key.char == "b":
+                self._b_pressed = True
+        except AttributeError:
+            pass
+
+    def _on_release(self, key):
+        try:
+            if key.char == "b":
+                self._b_pressed = False
+        except AttributeError:
+            pass
 
     def get_info(self) -> np.ndarray:
         qpos = self._robot.get_observations()["joint_pos"]
-        encoder_obs = self._motor_chain.get_same_bus_device_states()
-        time.sleep(0.01)
-        gripper_cmd = 1 - encoder_obs[0].position
-        qpos_with_gripper = np.concatenate([qpos, [gripper_cmd]])
-        return qpos_with_gripper, encoder_obs[0].io_inputs
+        if self._with_teaching_handle:
+            encoder_obs = self._motor_chain.get_same_bus_device_states()
+            time.sleep(0.01)
+            gripper_cmd = 1 - encoder_obs[0].position
+            qpos_with_gripper = np.concatenate([qpos, [gripper_cmd]])
+            return qpos_with_gripper, encoder_obs[0].io_inputs
+        else:
+            gripper_cmd = 0.0 if self._b_pressed else 1.0
+            qpos_with_gripper = np.concatenate([qpos, [gripper_cmd]])
+            button_inputs = (0.0, 0.0)
+            if not self._synchronized:
+                self._synchronized = True
+                button_inputs = (1.0, 1.0)
+            return qpos_with_gripper, button_inputs
+
+    def get_joint_pos(self) -> np.ndarray:
+        qpos = self._robot.get_observations()["joint_pos"]
+        if self._with_teaching_handle:
+            encoder_obs = self._motor_chain.get_same_bus_device_states()
+            time.sleep(0.01)
+            gripper_state = 1 - encoder_obs[0].position
+        else:
+            gripper_state = 1.0 # Gripper is open
+        qpos_with_gripper = np.concatenate([qpos, [gripper_state]])
+        return qpos_with_gripper
 
     def command_joint_pos(self, joint_pos: np.ndarray) -> None:
         assert joint_pos.shape[0] == 6
@@ -114,20 +155,27 @@ def main(args: Args) -> None:
     from i2rt.robots.utils import GripperType
 
     gripper_type = GripperType.from_string_name(args.gripper)
-
     if args.mode != "visualizer":
-        robot = get_yam_robot(channel=args.can_channel, gripper_type=gripper_type)
-
+        while True:
+            try:
+                robot = get_yam_robot(channel=args.can_channel, gripper_type=gripper_type,mode = args.mode)
+                break
+            except AssertionError as e:
+                print(f"Failed to initialize robot with AssertionError: {e}. Retrying...")
+                time.sleep(1.0)
+    
     if args.mode == "follower":
         server_robot = ServerRobot(robot, DEFAULT_ROBOT_PORT)
         server_robot.serve()
     elif args.mode == "leader":
-        robot = YAMLeaderRobot(robot)
+        with_teaching_handle = args.gripper == "yam_teaching_handle"
+        robot = YAMLeaderRobot(robot, with_teaching_handle=with_teaching_handle)
         robot_current_kp = robot._robot._kp
+
         client_robot = ClientRobot(DEFAULT_ROBOT_PORT, host=args.server_host)
 
         # sync the robot state
-        current_joint_pos, current_button = robot.get_info()
+        current_joint_pos = robot.get_joint_pos()
         current_follower_joint_pos = client_robot.get_joint_pos()
         print(f"Current leader joint pos: {current_joint_pos}")
         print(f"Current follower joint pos: {current_follower_joint_pos}")
