@@ -15,6 +15,7 @@ A Python client library for interacting with [I2RT](https://i2rt.com/) products,
 
 ```bash
 conda create --name i2rt_env python=3.10
+conda activate i2rt_env
 cd ~/i2rt
 pip install -e .
 ```
