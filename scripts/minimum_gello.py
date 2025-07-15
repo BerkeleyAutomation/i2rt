@@ -79,6 +79,9 @@ class ClientRobot(Robot):
         """
         return self._client.get_observations().result()
 
+    def close(self) -> None:
+        self._client.close()
+
 
 class YAMLeaderRobot:
     def __init__(self, robot: MotorChainRobot, with_teaching_handle: bool = True):
